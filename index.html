@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>David Starr</title>
+	<script type="text/javascript" src="./MidiConvert/build/MidiConvert.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/1.3.5/jspdf.debug.js" integrity="sha384-CchuzHs077vGtfhGYl9Qtc7Vx64rXBXdIAZIPbItbNyWIRTdG0oYAqki3Ry13Yzu" crossorigin="anonymous"></script>
+	<script src='./jsPDF/dist/jspdf.debug.js'></script>
+	<script src='./jsPDF/src/deprecated/html2pdf.js'></script>
+</head>
+<body>
+	<style type="text/css">
+	
+		body {
+			font-family: "Roboto Mono", monospace;
+			text-align: center;
+			margin-top: 30px;
+		}
+		#name {
+			position: absolute;	
+			margin-left: -250px;
+			left: 50%;
+			margin-top: 0px;
+		}
+		#composer {
+			position: absolute;	
+			margin-left: -250px;
+			left: 50%;
+			margin-top: 30px;
+		}
+		#FileDrop{
+			position: absolute;
+			width: 500px;
+			height: 200px;
+			margin-left: -250px;
+			border: 2px dashed black;
+			left: 50%;
+			margin-top: 70px;
+			color: black;
+		}
+
+		#FileDrop.Hover{
+			background-color: black;
+			color: white;
+		}
+
+		#FileDrop input {
+			position: absolute;
+			width: 100%;
+			height: 100%;
+			opacity: 0;
+			left: 0px;
+			top: 0px;
+		}
+
+		#FileDrop #Text {
+			position: absolute;
+			width: 100%;
+			height: 100%;
+			line-height: 200px;
+			left: 0px;
+			top: 0px;
+			text-align: center;
+		}
+
+		textarea {
+			font-family: "Roboto Mono" monospace;
+			height: 300px;
+			width: 100%;
+			display: inline-block;
+			position: relative;
+		}
+
+		#Results {
+			position: absolute;
+			width: 500px;
+			margin-left: -250px;
+			top: 20em;
+			left: 50%;
+			position: absolute;
+		}
+
+		#Settings {
+			background-color: black;
+			left: 20px;
+			top: 70px;
+			width: 125px;
+			height: auto;
+			padding-bottom: 10px;
+			position: absolute;
+		}
+
+		#Settings span {
+			width: 60px;
+			float: left;
+			color: white;
+			font-size: 12px;
+			text-align: left;
+			margin-left: 10px;
+			margin-top: 10px;
+		}
+
+		#Settings input {
+			width: 30px;
+			float: left;
+			margin-left: 10px;
+			margin-top: 10px;
+		}
+		#download{
+			position: absolute;
+			top: 40em;
+		}
+	</style>
+	
+	<div id="FileDrop" class='remove'>
+		<div id="Text">
+			Drop a midi file here
+		</div>
+		<input type="file" accept="audio/midi">
+	</div>
+	<div id="Results"  class='remove'>
+		<textarea id="ResultsText"></textarea>
+	</div>
+	<div id='name' class='remove'>
+	<label for= "title">Enter Title here: </label>
+	<input type="text" id="title">
+	</div>
+	<div id='composer' class='remove'>
+	<label for= "author">Enter Composer here: </label>
+	<input type="text" id="author">
+	<div id="download" class='remove'>Download an example MIDI file <a href="Resume CS.pdf" download="Silent Night">here</a>.</div>
+	
+	<script type="text/javascript">
+
+		if (!(window.File && window.FileReader && window.FileList && window.Blob)) {
+			document.querySelector("#FileDrop #Text").textContent = "Reading files not supported by this browser";
+		} else {
+
+			var fileDrop = document.querySelector("#FileDrop") 
+			fileDrop.addEventListener("dragenter", function(){
+				fileDrop.classList.add("Hover");
+			})
+
+			fileDrop.addEventListener("dragleave", function(){
+				fileDrop.classList.remove("Hover");
+			});
+
+			fileDrop.addEventListener("drop", function(){
+				fileDrop.classList.remove("Hover");
+			});
+
+			document.querySelector("#FileDrop input").addEventListener("change", function(e){
+				//get the files
+				var files = e.target.files;
+				if (files.length > 0){
+					
+					var file = files[0];
+					document.querySelector("#FileDrop #Text").textContent = file.name;
+					parseFile(file);
+					
+				}
+			});
+		}
+
+		
+		function parseFile(file){
+			//read the file
+			var testArr=[];
+			var data;
+			var tracks;
+			var reader = new FileReader();
+			reader.onload = function(e){
+				var partsData = MidiConvert.parse(e.target.result);
+				var tempo = round(partsData.header.bpm,1);
+				var beatsInMeasure = partsData.header.timeSignature[0];
+				var beatValue = partsData.header.timeSignature[1];
+				tracks = partsData.tracks;
+				for(x=1;x<tracks.length;x++){
+					testArr.push(tracks[x]);
+				}
+				modifyData(testArr,tempo,beatValue,beatsInMeasure);
+				var data = JSON.stringify(testArr, undefined, 2);
+				
+							
+			};
+			
+			reader.readAsBinaryString(file);
+			
+		}
+		function modifyData(trax,bpm,beatVal,numBeats){
+			for(x=0;x<document.getElementsByClassName("remove").length;x++){
+				document.getElementsByClassName("remove")[x].style.display = "none";
+			}		
+			var beatLength = 60/bpm;
+			var finalArr=[{"tempo": bpm, "time signature": [numBeats, beatVal]}];
+			if(finalArr[0]["name"]==""){finalArr[0]["name"]="Untitled";}
+			const track = {
+				"instrument": "not specified",	
+				"notes": []
+			};
+			const note = {
+				"note": "none",
+				"midiNum": 0, 
+				"noteLength": 0, 
+				"beatNum": 0,
+				"velocity": 0
+			};
+			for(x in trax){
+				const thisTrack = Object.create(track);
+				var notesArr = [];
+				for(y in trax[x]["notes"]){
+					const me = Object.create(note);
+					me["note"] = trax[x].notes[y]["name"];
+					me["midiNum"] = trax[x].notes[y]["midi"];
+					//noteLength is a fraction of duration / beat length
+					//new "duration" trait is num beats
+					var length = round(trax[x].notes[y]["duration"]/beatLength, 2);
+					
+					if(beatVal==4){
+						if(length>=5.8&&length<=6.2){
+							//true value 6.0--tolerance range 5.8 to 6.2
+							me["noteLength"] = "dotted whole";
+							me["duration"]=6;
+						}
+						if(length>=3.8&&length<=4.2){
+							//true value 4.0--tolerance range 3.8 to 4.2
+							me["noteLength"] = "whole";
+							me["duration"]=4;
+						}
+						if(length>=2.8&&length<=3.2){
+							//true value 3.0--tolerance range 2.8 to 3.2
+							me["noteLength"] = "dotted half";
+							me["duration"]=3;
+						}
+						if(length>=1.8&&length<=2.2){
+							//true value 2.0--tolerance range 1.8 to 2.2
+							me["noteLength"] = "half";
+							me["duration"]=2;
+						}
+						if(length>=1.4&&length<=1.6){
+							//true value 1.5--tolerance range 1.4 to 1.6
+							me["noteLength"] = "dotted quarter";
+							me["duration"]=1.5;
+						}
+						if(length>=0.8&&length<=1.2){
+							//true value 1.0--tolerance range 0.8 to 1.2
+							me["noteLength"] = "quarter";
+							me["duration"]=1;
+						}
+						if(length>=0.7&&length<=0.8){
+							//true value 0.75--tolerance range 0.7 to 0.8
+							me["noteLength"] = "dotted eighth";
+							me["duration"]=0.75;
+						}
+						if(length>=0.4&&length<=0.7){
+							//true value 0.5--tolerance range 0.4 to 0.7
+							me["noteLength"] = "eighth";
+							me["duration"]=0.5;
+						}
+						if(length>=0.35&&length<=0.4){
+							//true value 0.375--tolerance range 0.35 to 0.4
+							me["noteLength"] = "dotted sixteenth";
+							me["duration"]=0.375;
+						}
+						if(length>=0.15&&length<=0.35){
+							//true value 0.25--tolerance range 0.15 to 0.35
+							me["noteLength"] = "sixteenth";
+							me["duration"]=0.25;
+						}
+						if(length>=0.0&&length<=0.15){
+							//true value 0.125--tolerance range 0.0 to 0.15
+							me["noteLength"] = "thirty-second";
+							me["duration"]=0.125;
+						}
+					}
+					else if(beatVal==8){
+						if(length>=5.8&&length<=6.2){
+							//true value 8.0--tolerance range 7.8 to 8.2
+							me["noteLength"] = "whole";
+							me["duration"]=8;
+						}
+						if(length>=5.8&&length<=6.2){
+							//true value 6.0--tolerance range 5.8 to 6.2
+							me["noteLength"] = "dotted half";
+							me["duration"]=6;
+						}
+						if(length>=3.8&&length<=4.2){
+							//true value 4.0--tolerance range 3.8 to 4.2
+							me["noteLength"] = "half";
+							me["duration"]=4;
+						}
+						if(length>=2.8&&length<=3.2){
+							//true value 3.0--tolerance range 2.8 to 3.2
+							me["noteLength"] = "dotted dotted";
+							me["duration"]=3;
+						}
+						if(length>=1.8&&length<=2.2){
+							//true value 2.0--tolerance range 1.8 to 2.2
+							me["noteLength"] = "quarter";
+							me["duration"]=2;
+						}
+						if(length>=1.4&&length<=1.6){
+							//true value 1.5--tolerance range 1.4 to 1.6
+							me["noteLength"] = "dotted eighth";
+							me["duration"]=1.5;
+						}
+						if(length>=0.8&&length<=1.2){
+							//true value 1.0--tolerance range 0.8 to 1.2
+							me["noteLength"] = "eighth";
+							me["duration"]=1;
+						}
+						if(length>=0.7&&length<=0.8){
+							//true value 0.75--tolerance range 0.7 to 0.8
+							me["noteLength"] = "dotted sixteenth";
+							me["duration"]=0.75;
+						}
+						if(length>=0.4&&length<=0.7){
+							//true value 0.5--tolerance range 0.4 to 0.7
+							me["noteLength"] = "sixteenth";
+							me["duration"]=0.5;
+						}
+						if(length>=0.35&&length<=0.4){
+							//true value 0.375--tolerance range 0.35 to 0.4
+							me["noteLength"] = "dotted thirty-second";
+							me["duration"]=0.375;
+						}
+						if(length>=0.15&&length<=0.35){
+							//true value 0.25--tolerance range 0.15 to 0.35
+							me["noteLength"] = "thirty-second";
+							me["duration"]=0.25;
+						}
+						if(length>=0.0&&length<=0.15){
+							//true value 0.125--tolerance range 0.0 to 0.15
+							me["noteLength"] = "sixty-fourth";
+							me["duration"]=0.125;
+						}
+					}
+					
+					me["beatNum"] = round(1+trax[x].notes[y]["time"]/beatLength, 3);
+					me["velocity"] = round(trax[x].notes[y]["velocity"],2);
+					notesArr.push(me);
+				}
+				if(trax[x]["instrumentFamily"]){
+					thisTrack["instrument"]=trax[x]["instrumentFamily"];
+				}
+				thisTrack["notes"] = notesArr;
+				finalArr.push(thisTrack);
+				//makeChords(finalArr);
+				musicVel(finalArr);
+				//addRests(finalArr);
+				makeMeasures(finalArr);
+				sheetMusic(finalArr);
+			}
+			document.querySelector("#ResultsText").value = JSON.stringify(finalArr, undefined, 2);
+		}
+		function round(number, precision) {
+			//rounds a number up to a specified precision
+ 			var shift = function (number, precision, reverseShift) {
+    				if (reverseShift) {
+      					precision = -precision;
+    				}  
+    				numArray = ("" + number).split("e");
+    				return +(numArray[0] + "e" + (numArray[1] ? (+numArray[1] + precision) : precision));
+  				};
+  			return shift(Math.round(shift(number, precision, false)), precision, true);
+		}
+		function makeChords(obj){
+			//joins notes that occur at the same time and last the same amount of time into one note (chord)
+			for(x=1;x<obj.length;x++){
+				for(y=0;y<obj[x]["notes"].length-1;y++){
+					if(obj[x]["notes"][y]["beatNum"]==obj[x]["notes"][y+1]["beatNum"]&&obj[x]["notes"][y]["duration"]==obj[x]["notes"][y+1]["duration"]){
+						var newArr = [];
+						var midiArr = [];
+						newArr.push(obj[x]["notes"][y]["note"]);
+						midiArr.push(obj[x]["notes"][y]["midiNum"]);
+						newArr.push(obj[x]["notes"][y+1]["note"]);
+						midiArr.push(obj[x]["notes"][y+1]["midiNum"]);
+						obj[x]["notes"][y]["note"]=newArr;
+						obj[x]["notes"][y]["midiNum"]=midiArr;
+						obj[x]["notes"].splice(y+1, 1);
+					}
+				}
+			}
+		}
+		function musicVel(obj){
+			//changes numerical velocity into a broader musical notation that will be visible
+			for(x=1;x<obj.length;x++){
+				for(y=0;y<obj[x]["notes"].length;y++){
+					if(obj[x]["notes"][y]["velocity"]>=0&&obj[x]["notes"][y]["velocity"]<0.1666){
+						obj[x]["notes"][y]["velocity"]="pp";
+					}
+					else if(obj[x]["notes"][y]["velocity"]>=0.1666&&obj[x]["notes"][y]["velocity"]<0.3333){
+						obj[x]["notes"][y]["velocity"]="p";
+					}
+					else if(obj[x]["notes"][y]["velocity"]>=0.3333&&obj[x]["notes"][y]["velocity"]<0.50){
+						obj[x]["notes"][y]["velocity"]="mp";
+					}
+					else if(obj[x]["notes"][y]["velocity"]>=0.50&&obj[x]["notes"][y]["velocity"]<0.6666){
+						obj[x]["notes"][y]["velocity"]="mf";
+					}
+					else if(obj[x]["notes"][y]["velocity"]>=0.6666&&obj[x]["notes"][y]["velocity"]<0.8333){
+						obj[x]["notes"][y]["velocity"]="f";
+					}
+					else if(obj[x]["notes"][y]["velocity"]>=0.8333&&obj[x]["notes"][y]["velocity"]<=1.00){
+						obj[x]["notes"][y]["velocity"]="ff";
+					}
+				}
+			}
+
+		}
+		function makeMeasures(obj){
+			for(x=1;x<obj.length;x++){	
+				var beatsInMeasure = obj[0]["time signature"][0];
+				var allMeasures = []; //move all notes in measure arrays into this array
+				var totalNotes = obj[x]["notes"].length;
+				var numOfBeats = round(obj[x]["notes"][totalNotes-1]["beatNum"]+obj[x]["notes"][totalNotes-1]["duration"],1);
+				var numOfMeasures = round(numOfBeats/beatsInMeasure,1);
+				//cycles for the amount of measures to be filled
+				for(measureNum=0;measureNum<numOfMeasures;measureNum++){
+					var measure = [];
+					//filters all of the items that have the beatNums of the current measure
+					function checkInMeasure(item) {
+    						if(item["beatNum"] < 1 + beatsInMeasure + measureNum * beatsInMeasure && item["beatNum"] >= 1 + measureNum * beatsInMeasure){
+							return true;
+						}
+						else{return false;}
+					}
+					measure = obj[x]["notes"].filter(checkInMeasure); 
+						
+					allMeasures.push(measure);
+				}
+				obj[x]["notes"]=allMeasures;
+			}						
+		}
+	
+		/*function addRests(obj){
+			for(x=1;x<obj.length;x++){
+				for(y=0;y<obj[x]["notes"].length-1;y++){
+					var currentBeatNumber = obj[x]["notes"][y]["beatNum"];
+					var nextBeatNumber = obj[x]["notes"][y+1]["beatNum"];
+					var sum = currentBeatNumber+obj[x]["notes"][y]["duration"];
+					if(currentBeatNumber < nextBeatNumber && sum < nextBeatNumber){
+						//add rests where a gap exists between notes
+						var restLength = nextBeatNumber-sum;
+						const rest = {
+							"note": "rest",
+							//rest length is in terms of 1 beat. ie. duration = 1.5 would be a beat and a half.
+							"duration": restLength, 
+							"beatNum": sum,
+							"velocity": "none"
+						};
+						/*if(obj[0]["time signature"][1]==4){
+							if(restLength==6){rest["noteLength"]="dotted whole rest";}
+							if(restLength==4){rest["noteLength"]="whole rest";}
+							if(restLength==3){rest["noteLength"]="dotted half rest";}
+							if(restLength==2){rest["noteLength"]="half rest";}
+							if(restLength==1.5){rest["noteLength"]="dotted quarter rest";}
+							if(restLength==1){rest["noteLength"]="quarter rest";}
+							if(restLength==0.75){rest["noteLength"]="dotted eighth rest";}
+							if(restLength==0.5){rest["noteLength"]="eigth rest";}
+							if(restLength==0.375){rest["noteLength"]="dotted sixteenth rest";}
+							if(restLength==0.25){rest["noteLength"]="sixteenth rest";}
+							if(restLength==0.125){rest["noteLength"]="thirty-second rest";}
+						}
+						if(obj[0]["time signature"][1]==8){
+							if(restLength==8){rest["noteLength"]="whole rest";}
+							if(restLength==6){rest["noteLength"]="dotted half rest";}
+							if(restLength==4){rest["noteLength"]="half rest";}
+							if(restLength==3){rest["noteLength"]="dotted quarter rest";}
+							if(restLength==2){rest["noteLength"]="quarter rest";}
+							if(restLength==1.5){rest["noteLength"]="dotted eighth rest";}
+							if(restLength==1){rest["noteLength"]="eigth rest";}
+							if(restLength==0.75){rest["noteLength"]="dotted sixteenth rest";}
+							if(restLength==0.5){rest["noteLength"]="sixteenth rest";}
+							if(restLength==0.375){rest["noteLength"]="dotted thirty-second rest";}
+							if(restLength==0.25){rest["noteLength"]="thirty-second rest";}
+							if(restLength==0.125){rest["noteLength"]="sixty-fourth rest";}
+						}*-/
+						obj[x]["notes"].splice(y,0,rest);
+						alert("got this far");	
+					}
+				}
+			}
+		}*/
+		function sheetMusic(obj){
+			var imgData = DATAIMAGE.imgData;
+			var curlyBrace = DATAIMAGE.curlyBrace;
+			var bassClef = DATAIMAGE.bassClef;
+			var quarterNote = DATAIMAGE.quarterNote;
+			var eighthNote = DATAIMAGE.eighthNote;
+			var halfNote = DATAIMAGE.halfNote;
+			var pdf = new jsPDF('p', 'pt', 'letter');
+			var title = document.getElementById('title').value;
+			var author = document.getElementById('author').value;
+			
+			for(x=1;x<obj.length;x++){
+				if(x>1){pdf.addPage();}
+				var beat;
+				var lineNum = 0;
+				var notes = obj[x]["notes"];
+				notes.splice(-1,1);
+				var numLines =  Math.ceil((notes.length-2)/4);
+				if(obj[0]["time signature"][1]==4){beat = quarterNote;}
+				if(obj[0]["time signature"][1]==8){beat = eighthNote;}
+				pdf.addImage(beat, 'png', 120,65, 8,16);				
+				pdf.setFontType("normal");
+				pdf.setFontSize(12);
+				pdf.text(550,78, author, null, null, 'right');
+				pdf.text(129, 78, '= ' + JSON.stringify(obj[0]["tempo"]));
+				pdf.setFontSize(30);
+				pdf.text(305, 50, title, null, null, 'center');
+				pdf.setFontSize(12);
+				pdf.setFontType("bold");
+				String.prototype.capitalize = function() {
+    					return this.charAt(0).toUpperCase() + this.slice(1);
+				}
+				var instrument = obj[x]["instrument"].capitalize();
+				pdf.text(60, 80, instrument);
+				//unique to first line
+				var line;
+				var measure = 0;
+				for(line=0; line<numLines; line++){
+					var startPosition = 95;
+					var numMeasures = 4; 
+					if(line == numLines-1){numMeasures = obj[x]["notes"].length - 2 - 4*line;}
+					if(line == 0){
+						pdf.setFontSize(12);
+						pdf.setFontType("bold");
+						pdf.text(95, 99.5, JSON.stringify(obj[0]["time signature"][0]));
+						pdf.text(95, 109.5, JSON.stringify(obj[0]["time signature"][1]));
+						pdf.text(95, 149.5, JSON.stringify(obj[0]["time signature"][0]));
+						pdf.text(95, 159.5, JSON.stringify(obj[0]["time signature"][1]));
+						startPosition+=30;
+						numMeasures = 2;
+					}
+					var measureLength = (550-95)/numMeasures;
+					if(line == 0){measureLength = (550-125)/numMeasures;}
+					var beatLength = measureLength/obj[0]["time signature"][0];
+					//grand staves and lines
+					pdf.addImage(imgData, 'JPEG', 60, 80+100*line, 24.5, 40.333);
+					pdf.addImage(bassClef, 'png', 65, 140+100*line, 20, 20);
+					pdf.addImage(curlyBrace, 'JPEG', 50, 90+100*line, 10, 70);
+					pdf.setLineWidth(1);
+					pdf.line(60, 160+100*line, 60, 90+100*line);
+					pdf.setLineWidth(0.5);
+					pdf.line(550, 90+100*line, 60, 90+100*line); 
+					pdf.line(550, 95+100*line, 60, 95+100*line);
+					pdf.line(550, 100+100*line, 60, 100+100*line);
+					pdf.line(550, 105+100*line, 60, 105+100*line);
+					pdf.line(550, 110+100*line, 60, 110+100*line);
+					pdf.line(550, 140+100*line, 60, 140+100*line); 
+					pdf.line(550, 145+100*line, 60, 145+100*line);
+					pdf.line(550, 150+100*line, 60, 150+100*line);
+					pdf.line(550, 155+100*line, 60, 155+100*line);
+					pdf.line(550, 160+100*line, 60, 160+100*line);
+					//pdf.line(550, 160+100*line, 550, 90+100*line); //vertical line at end (covered in last line)
+					//for (; note<notes.length; note++){
+						for(a=0;a<numMeasures;a++){
+							var endOfMeasure = startPosition + measureLength;
+							for(b=0;b<notes[measure].length;b++){
+								//for(c=0;c<notes[measure][b].length;c++){								
+									var pitch ;
+									/*if(notes[measure][b]["midiNum"]>60){
+										pitch = 94-(notes[measure][b]["midiNum"]-61)*2.5;	
+									}*/
+									if(notes[measure][b]["midiNum"]==47){pitch = 154;}			//b2
+									if(notes[measure][b]["midiNum"]==48){pitch = 151.5;}			//c2
+									if(notes[measure][b]["midiNum"]==49){pitch = 151.5;/*add sharp*/}	//c#2
+									if(notes[measure][b]["midiNum"]==50){pitch = 149;}			//d2
+									if(notes[measure][b]["midiNum"]==51){pitch = 149;/*add sharp*/}		//d#2
+									if(notes[measure][b]["midiNum"]==52){pitch = 146.5;}			//e2
+									if(notes[measure][b]["midiNum"]==53){pitch = 144;}			//f2
+									if(notes[measure][b]["midiNum"]==54){pitch = 144;/*add sharp*/}		//f#2
+									if(notes[measure][b]["midiNum"]==55){pitch = 141.5;}			//g2
+									if(notes[measure][b]["midiNum"]==56){pitch = 141.5;/*add sharp*/}	//g#2
+									if(notes[measure][b]["midiNum"]==57){pitch = 139;}			//a3
+									if(notes[measure][b]["midiNum"]==58){pitch = 139;/*add sharp*/}		//a#3
+									if(notes[measure][b]["midiNum"]==47){pitch = 136.5;}			//b3
+									if(notes[measure][b]["midiNum"]==48){pitch = 134;}1			//c3
+									if(notes[measure][b]["midiNum"]==49){pitch = 134;/*add sharp*/}		//c#3
+									if(notes[measure][b]["midiNum"]==50){pitch = 131.5;}			//d3
+									if(notes[measure][b]["midiNum"]==51){pitch = 131.5;/*add sharp*/}	//d#3
+									if(notes[measure][b]["midiNum"]==52){pitch = 129;}			//e3
+									if(notes[measure][b]["midiNum"]==53){pitch = 126.5;}			//f3
+									if(notes[measure][b]["midiNum"]==54){pitch = 126.5;/*add sharp*/}	//f#3
+									if(notes[measure][b]["midiNum"]==55){pitch = 124;}			//g3
+									if(notes[measure][b]["midiNum"]==56){pitch = 124;/*add sharp*/}		//g#3
+									if(notes[measure][b]["midiNum"]==57){pitch = 121.5;}			//a4
+									if(notes[measure][b]["midiNum"]==58){pitch = 121.5;/*add sharp*/}	//a#4
+									if(notes[measure][b]["midiNum"]==59){pitch = 118;}			//b4
+									if(notes[measure][b]["midiNum"]==60){pitch = 100;			//C4
+										pdf.line(startPosition+5, 119+100*line, startPosition+17, 119+100*line);}
+									if(notes[measure][b]["midiNum"]==61){pitch = 100;/*add sharp*/}		//C#4
+									if(notes[measure][b]["midiNum"]==62){pitch = 94;}			//D4
+									if(notes[measure][b]["midiNum"]==63){pitch = 94;/*add sharp*/}		//D#4
+									if(notes[measure][b]["midiNum"]==64){pitch = 91.5;}			//E4
+									if(notes[measure][b]["midiNum"]==65){pitch = 89;}			//F4
+									if(notes[measure][b]["midiNum"]==66){pitch = 89;/*add sharp*/}		//F#4
+									if(notes[measure][b]["midiNum"]==67){pitch = 86.5;}			//G4
+									if(notes[measure][b]["midiNum"]==68){pitch = 86.5;/*add sharp*/}	//G#4
+									if(notes[measure][b]["midiNum"]==69){pitch = 84;}			//A4
+									if(notes[measure][b]["midiNum"]==70){pitch = 84;}			//A#4
+									if(notes[measure][b]["midiNum"]==71){pitch = 81.5;}			//B4
+									if(notes[measure][b]["midiNum"]==72){pitch = 79;}			//C5
+									if(notes[measure][b]["midiNum"]==73){pitch = 79;/*add sharp*/}		//C#5
+									if(notes[measure][b]["midiNum"]==74){pitch = 76.5;}			//D5
+									if(notes[measure][b]["midiNum"]==75){pitch = 76.5;/*add sharp*/}	//D#5
+									if(notes[measure][b]["midiNum"]==76){pitch = 74;}			//E5
+									if(notes[measure][b]["midiNum"]==77){pitch = 71.5;}			//F5
+									if(notes[measure][b]["midiNum"]==78){pitch = 71.5;/*add sharp*/}	//F#5
+									if(notes[measure][b]["midiNum"]==79){pitch = 69;}			//G5
+									if(notes[measure][b]["midiNum"]==80){pitch = 69;/*add sharp*/}		//G#5
+									if(notes[measure][b]["midiNum"]==81){pitch = 66.5;}			//A5
+									if(notes[measure][b]["midiNum"]==82){pitch = 66.5;/*add sharp*/}	//A#5
+									if(notes[measure][b]["midiNum"]==83){pitch = 64;}			//B5
+									if(notes[measure][b]["midiNum"]==84){pitch = 61.5;}			//C6
+									/*if(notes[measure][b]["midiNum"]<60){
+										pitch = 118+(notes[measure][b]["midiNum"]-61)*2.5;
+									}*/
+									
+									var beatNum = notes[measure][b]["beatNum"]- measure*obj[0]["time signature"][0]-1;
+									//pdf.addImage(quarterNote, 'png', startPosition+beatNum*beatLength+5,86+100*line, 12,24);
+									//for(c=0;c<notes[measure][b].length;c++){//taking chords into consideration
+									if(notes[measure][b]["noteLength"]=="quarter"){
+										pdf.addImage(quarterNote, 'png', startPosition+beatNum*beatLength+5,pitch+100*line, 12,24);
+									}
+									if(notes[measure][b]["noteLength"]=="dotted quarter"){
+										pdf.addImage(quarterNote, 'png', startPosition+beatNum*beatLength+5,pitch+100*line, 12,24);
+										pdf.circle(startPosition+beatNum*beatLength+18,pitch+20+100*line, 1, 'F');
+									}
+									if(notes[measure][b]["noteLength"]=="eighth"){
+										pdf.addImage(eighthNote, 'png', startPosition+beatNum*beatLength+5,pitch+100*line, 20,21);
+									}
+									if(notes[measure][b]["noteLength"]=="half"){
+										pdf.addImage(halfNote, 'png', startPosition+beatNum*beatLength+5,pitch+100*line, 12,24);
+									}
+									if(notes[measure][b]["noteLength"]=="dotted half"){
+										pdf.addImage(halfNote, 'png', startPosition+beatNum*beatLength+5,pitch+100*line, 12,24);
+										pdf.circle(startPosition+beatNum*beatLength+18,pitch+20+100*line, 1, 'F');
+									}
+								//}
+							}
+							pdf.setLineWidth(0.5);
+							pdf.line(endOfMeasure, 160+100*line, endOfMeasure, 90+100*line);
+							measure++;
+							startPosition=endOfMeasure;
+						}
+					//}			
+				}
+				//ending lines				
+				pdf.setLineWidth(1);				
+				pdf.line(547, 160+100*(line-1), 547, 90+100*(line-1));
+				pdf.setLineWidth(2);
+				pdf.line(550, 160+100*(line-1), 550, 90+100*(line-1));
+			}
+
+			html2pdf(document.body, pdf,function(pdf) {
+				var iframe = document.createElement('iframe');
+				iframe.setAttribute('style','position:absolute;right:0; top:0; bottom:0; height:100%; width:100%');
+				document.body.appendChild(iframe);
+				iframe.src = pdf.output('datauristring');
+
+			       //var div = document.createElement('pre');
+			       //div.innerText=pdf.output();
+			       //document.body.appendChild(div);
+			    }
+			);
+
+
+	}
+	</script>
+	<script src="src/dataImages.js" async defer></script>
+</html>
+
+</body>
+ 
