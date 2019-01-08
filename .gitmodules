@@ -1,0 +1,6 @@
+[submodule "jsPDF"]
+	path = jsPDF
+	url = https://github.com/MrRio/jsPDF
+[submodule "MidiConvert"]
+	path = MidiConvert
+	url = https://github.com/Tonejs/MidiConvert
